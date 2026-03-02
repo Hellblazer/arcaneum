@@ -10,6 +10,25 @@ import logging
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 
+# Structural/container token types that have no inline content of their own.
+# These tokens open/close block-level containers — their content is provided by
+# child 'inline' tokens.  Including them causes duplicate text (the container's
+# .map fallback returns the same source lines as the inline child's .content).
+# Backport of nexus RDR-014 Fix 2.
+_STRUCTURAL_TOKEN_TYPES: frozenset[str] = frozenset({
+    "paragraph_open", "paragraph_close",
+    "bullet_list_open", "bullet_list_close",
+    "ordered_list_open", "ordered_list_close",
+    "list_item_open", "list_item_close",
+    "blockquote_open", "blockquote_close",
+    "table_open", "table_close",
+    "thead_open", "thead_close",
+    "tbody_open", "tbody_close",
+    "tr_open", "tr_close",
+    "td_open", "td_close",
+    "th_open", "th_close",
+})
+
 try:
     from markdown_it import MarkdownIt
     from markdown_it.token import Token
@@ -171,10 +190,11 @@ class SemanticMarkdownChunker:
                 i += 3  # heading_open, inline, heading_close
                 continue
 
-            # Add content to current section
+            # Add content to current section (skip structural container tokens whose
+            # content is duplicated by their child inline tokens).
             if current_section is not None:
                 content = self._extract_token_content(token, source_text)
-                if content:
+                if content and token.type not in _STRUCTURAL_TOKEN_TYPES:
                     current_section['content_parts'].append({
                         'type': token.type,
                         'content': content,
